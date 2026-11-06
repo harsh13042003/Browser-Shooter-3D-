@@ -56,7 +56,7 @@ It ships with three distinct experiences:
 
 ## Vibecoding
 
-This project is **100% vibecoded**: every line of code, every test, and this README were written by an AI coding agent ([Claude Code](https://claude.com/claude-code)) directed through natural-language conversation. No code was written by hand.
+This project is **100% vibecoded**: every line of code, every test, and this README were written by an AI coding agent directed through natural-language conversation. No code was written by hand.
 
 ## Game Modes
 

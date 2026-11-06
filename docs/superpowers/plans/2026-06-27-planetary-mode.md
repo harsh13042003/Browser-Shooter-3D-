@@ -1645,7 +1645,7 @@ gh pr create \
 - [ ] Round boundary warning appears when moving far from median player position
 - [ ] [M] button reopens map picker
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
+🤖 Generated with an AI coding agent
 EOF
 )"
 ```
