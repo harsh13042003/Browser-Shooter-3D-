@@ -1,0 +1,94 @@
+import { describe, it, expect } from 'vitest'
+import { Weapon } from '../Weapon'
+
+describe('Weapon', () => {
+  it('initializes with correct stats', () => {
+    const weapon = new Weapon('pistol')
+    expect(weapon.type).toBe('pistol')
+    expect(weapon.def.damage).toBe(25)
+    expect(weapon.ammo).toBe(60)
+    expect(weapon.isReloading).toBe(false)
+  })
+
+  it('can shoot when ammo is available', () => {
+    const weapon = new Weapon('pistol')
+    expect(weapon.canShoot()).toBe(true)
+    const shot = weapon.shoot()
+    expect(shot).toBe(true)
+    expect(weapon.ammo).toBe(59)
+  })
+
+  it('cannot shoot when ammo is empty', () => {
+    const weapon = new Weapon('pistol')
+    weapon.ammo = 0
+    expect(weapon.canShoot()).toBe(false)
+    expect(weapon.shoot()).toBe(false)
+  })
+
+  it('respects fire rate cooldown', () => {
+    const weapon = new Weapon('pistol')
+    weapon.shoot()
+    expect(weapon.canShoot()).toBe(false)
+    weapon.update(0.3)
+    expect(weapon.canShoot()).toBe(true)
+  })
+
+  it('reloads ammo', () => {
+    const weapon = new Weapon('pistol')
+    weapon.ammo = 10
+    weapon.reload()
+    expect(weapon.isReloading).toBe(true)
+    weapon.update(1.5)
+    expect(weapon.isReloading).toBe(false)
+    expect(weapon.ammo).toBe(60)
+  })
+
+  it('does not reload when already full', () => {
+    const weapon = new Weapon('pistol')
+    weapon.reload()
+    expect(weapon.isReloading).toBe(false)
+  })
+
+  it('adds ammo up to max', () => {
+    const weapon = new Weapon('pistol')
+    weapon.ammo = 50
+    weapon.addAmmo(20)
+    expect(weapon.ammo).toBe(60)
+  })
+
+  it('does not share its def with WEAPON_DEFS (safe to upgrade)', async () => {
+    const { WEAPON_DEFS } = await import('../WeaponDefs')
+    const w = new Weapon('ak')
+    expect(w.def).not.toBe(WEAPON_DEFS.ak)
+    expect(w.def.damage).toBe(WEAPON_DEFS.ak.damage)
+  })
+
+  it('applyUpgrade multiplies ammo and refills', () => {
+    const w = new Weapon('ak') // maxAmmo 90
+    w.ammo = 10
+    w.applyUpgrade({ ammoMult: 1.5 })
+    expect(w.def.maxAmmo).toBe(135)
+    expect(w.ammo).toBe(135)
+  })
+
+  it('applyUpgrade multiplies reload time and damage', () => {
+    const w = new Weapon('ak') // reload 2.5, damage 30
+    w.applyUpgrade({ reloadMult: 0.7, damageMult: 2 })
+    expect(w.def.reloadTime).toBeCloseTo(1.75)
+    expect(w.def.damage).toBe(60)
+  })
+
+  it('addAmmo clamps negative amounts to zero', () => {
+    const w = new Weapon('pistol')
+    w.ammo = 10
+    w.addAmmo(-20)
+    expect(w.ammo).toBe(0)
+  })
+
+  it('addAmmo does not exceed max', () => {
+    const w = new Weapon('pistol')
+    w.ammo = 55
+    w.addAmmo(100)
+    expect(w.ammo).toBe(60)
+  })
+})

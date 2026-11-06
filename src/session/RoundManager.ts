@@ -1,0 +1,87 @@
+export enum RoundState {
+  Buying = 'buying',
+  Active = 'active',
+  Over = 'over',
+}
+
+export class RoundManager {
+  state: RoundState = RoundState.Buying
+  round: number = 1
+  ctScore: number = 0
+  tScore: number = 0
+  buyPhaseTimer: number = 15
+  roundTimer: number = 115
+  isHalftime: boolean = false
+  matchOver: boolean = false
+  winner: 'ct' | 't' | 'draw' | null = null
+
+  private readonly maxRounds = 30
+  private readonly winScore = 16
+  private readonly buyPhaseDuration = 15
+  private readonly roundDuration = 115
+
+  get buyPhase(): boolean {
+    return this.state === RoundState.Buying
+  }
+
+  /**
+   * Advance the round/buy timers.
+   *
+   * @param bombActive when true, the bomb has been planted; CS-style, the round
+   *   timer freezes and only the bomb's own fuse (explosion/defuse) can end the
+   *   round. Without this, a plant made late in the round would be cut short the
+   *   instant the round timer expired, robbing CTs of their defuse window.
+   */
+  update(dt: number, bombActive: boolean = false): void {
+    if (this.state === RoundState.Buying) {
+      this.buyPhaseTimer -= dt
+      if (this.buyPhaseTimer <= 0) {
+        this.state = RoundState.Active
+        this.roundTimer = this.roundDuration
+      }
+    } else if (this.state === RoundState.Active) {
+      if (bombActive) return // bomb planted: only the fuse matters now
+      this.roundTimer -= dt
+      if (this.roundTimer <= 0) {
+        this.state = RoundState.Over
+        this.roundTimer = 0
+      }
+    }
+  }
+
+  endRound(winner: 'ct' | 't' | 'draw'): void {
+    if (winner === 'ct') this.ctScore++
+    else if (winner === 't') this.tScore++
+    // draw: no score change
+
+    // Check match end
+    if (this.ctScore >= this.winScore || this.tScore >= this.winScore) {
+      this.matchOver = true
+      this.winner = this.ctScore >= this.winScore ? 'ct' : 't'
+      return
+    }
+
+    if (this.round >= this.maxRounds) {
+      this.matchOver = true
+      if (this.ctScore === this.tScore) {
+        this.winner = 'draw'
+      } else {
+        this.winner = this.ctScore > this.tScore ? 'ct' : 't'
+      }
+      return
+    }
+
+    // Halftime is only the boundary round (15 -> 16); clear it for every other
+    // round so the second half doesn't repeatedly trigger a halftime economy reset.
+    this.isHalftime = this.round === 15
+
+    // Advance round
+    this.round++
+    this.state = RoundState.Buying
+    this.buyPhaseTimer = this.buyPhaseDuration
+  }
+
+  setRound(round: number): void {
+    this.round = round
+  }
+}

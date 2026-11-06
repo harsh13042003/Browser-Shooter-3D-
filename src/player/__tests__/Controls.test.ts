@@ -1,0 +1,280 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { Controls } from '../Controls'
+import { DEFAULT_KEYMAP } from '../../settings/Settings'
+
+// jsdom doesn't implement pointer lock APIs — mock them globally
+if (!(document as any).exitPointerLock) {
+  (document as any).exitPointerLock = vi.fn()
+}
+
+function createMockElement(): HTMLElement {
+  const el = document.createElement('canvas')
+  // jsdom doesn't implement requestPointerLock, add a mock
+  ;(el as any).requestPointerLock = vi.fn()
+  return el
+}
+
+describe('Controls', () => {
+  let element: HTMLElement
+  let controls: Controls
+
+  beforeEach(() => {
+    element = createMockElement()
+    controls = new Controls(element, () => 'playing')
+  })
+
+  afterEach(() => {
+    controls.destroy()
+    vi.restoreAllMocks()
+  })
+
+  it('initializes with all inputs false', () => {
+    expect(controls.forward).toBe(false)
+    expect(controls.backward).toBe(false)
+    expect(controls.left).toBe(false)
+    expect(controls.right).toBe(false)
+    expect(controls.jump).toBe(false)
+    expect(controls.shoot).toBe(false)
+  })
+
+  it('sets forward on KeyW down', () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }))
+    expect(controls.forward).toBe(true)
+  })
+
+  it('clears forward on KeyW up', () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }))
+    document.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW' }))
+    expect(controls.forward).toBe(false)
+  })
+
+  it('sets backward on KeyS', () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyS' }))
+    expect(controls.backward).toBe(true)
+  })
+
+  it('sets left on KeyA', () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA' }))
+    expect(controls.left).toBe(true)
+  })
+
+  it('sets right on KeyD', () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyD' }))
+    expect(controls.right).toBe(true)
+  })
+
+  it('sets jump on Space', () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }))
+    expect(controls.jump).toBe(true)
+  })
+
+  it('clears jump on Space up', () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }))
+    document.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space' }))
+    expect(controls.jump).toBe(false)
+  })
+
+  it('sets shoot on left mouse down', () => {
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    expect(controls.shoot).toBe(true)
+  })
+
+  it('clears shoot on left mouse up', () => {
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    document.dispatchEvent(new MouseEvent('mouseup', { button: 0 }))
+    expect(controls.shoot).toBe(false)
+  })
+
+  it('does not set shoot on right mouse button', () => {
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 2 }))
+    expect(controls.shoot).toBe(false)
+  })
+
+  it('left click long-throws instead of firing when a grenade is selected', () => {
+    const throws: string[] = []
+    controls.onThrowGrenade = (mode) => throws.push(mode)
+    controls.onIsGrenadeSelected = () => true
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    expect(controls.shoot).toBe(false)
+    expect(throws).toEqual(['long'])
+  })
+
+  it('left click fires (no throw) when no grenade is selected', () => {
+    const throws: string[] = []
+    controls.onThrowGrenade = (mode) => throws.push(mode)
+    controls.onIsGrenadeSelected = () => false
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    expect(controls.shoot).toBe(true)
+    expect(throws).toEqual([])
+  })
+
+  it('requests pointer lock on mouse click', () => {
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    expect((element as any).requestPointerLock).toHaveBeenCalled()
+  })
+
+  it('does not request pointer lock when gameState is not playing', () => {
+    controls.destroy()
+    const el2 = createMockElement()
+    const paused = new Controls(el2, () => 'paused')
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    expect((el2 as any).requestPointerLock).not.toHaveBeenCalled()
+    paused.destroy()
+  })
+
+  it('does not request pointer lock if already locked', () => {
+    Object.defineProperty(document, 'pointerLockElement', {
+      value: element,
+      configurable: true,
+    })
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    expect((element as any).requestPointerLock).not.toHaveBeenCalled()
+  })
+
+  it('returns movement state via getMovement()', () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }))
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyD' }))
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }))
+
+    const movement = controls.getMovement()
+    expect(movement.forward).toBe(true)
+    expect(movement.backward).toBe(false)
+    expect(movement.left).toBe(false)
+    expect(movement.right).toBe(true)
+    expect(movement.jump).toBe(true)
+  })
+
+  it('handles multiple simultaneous keys', () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }))
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA' }))
+    expect(controls.forward).toBe(true)
+    expect(controls.left).toBe(true)
+  })
+
+  it('ignores unrelated key codes', () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyQ' }))
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE' }))
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Enter' }))
+    expect(controls.forward).toBe(false)
+    expect(controls.backward).toBe(false)
+    expect(controls.left).toBe(false)
+    expect(controls.right).toBe(false)
+    expect(controls.jump).toBe(false)
+  })
+
+  it('fires onTalkStart once on KeyK down even with auto-repeat', () => {
+    const start = vi.fn()
+    controls.onTalkStart = start
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyK' }))
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyK' })) // OS auto-repeat
+    expect(start).toHaveBeenCalledTimes(1)
+  })
+
+  it('fires onTalkStop on KeyK up and allows talking again', () => {
+    const start = vi.fn()
+    const stop = vi.fn()
+    controls.onTalkStart = start
+    controls.onTalkStop = stop
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyK' }))
+    document.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyK' }))
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyK' }))
+    expect(stop).toHaveBeenCalledTimes(1)
+    expect(start).toHaveBeenCalledTimes(2)
+  })
+
+  it('calls onMouseMove when pointer is locked and mouse moves', () => {
+    const handler = vi.fn()
+    controls.onMouseMove = handler
+
+    Object.defineProperty(document, 'pointerLockElement', {
+      value: element,
+      configurable: true,
+    })
+
+    const moveEvent = new MouseEvent('mousemove', { movementX: 5, movementY: -3 })
+    document.dispatchEvent(moveEvent)
+    expect(handler).toHaveBeenCalledWith(moveEvent)
+  })
+
+  it('does not call onMouseMove when pointer is not locked', () => {
+    const handler = vi.fn()
+    controls.onMouseMove = handler
+
+    Object.defineProperty(document, 'pointerLockElement', {
+      value: null,
+      configurable: true,
+    })
+
+    document.dispatchEvent(new MouseEvent('mousemove', { movementX: 5 }))
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('does not call onMouseMove when handler is null', () => {
+    controls.onMouseMove = null
+
+    Object.defineProperty(document, 'pointerLockElement', {
+      value: element,
+      configurable: true,
+    })
+
+    // Should not throw
+    document.dispatchEvent(new MouseEvent('mousemove', { movementX: 5 }))
+  })
+
+  it('cleans up event listeners on destroy', () => {
+    const removeSpy = vi.spyOn(document, 'removeEventListener')
+    controls.destroy()
+    expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function))
+    expect(removeSpy).toHaveBeenCalledWith('keyup', expect.any(Function))
+    expect(removeSpy).toHaveBeenCalledWith('mousedown', expect.any(Function))
+    expect(removeSpy).toHaveBeenCalledWith('mouseup', expect.any(Function))
+    expect(removeSpy).toHaveBeenCalledWith('mousemove', expect.any(Function))
+    expect(removeSpy).toHaveBeenCalledWith('pointerlockchange', expect.any(Function))
+  })
+
+  it('resets shoot flag when pointer lock is lost', () => {
+    controls.shoot = true
+    Object.defineProperty(document, 'pointerLockElement', {
+      value: null,
+      configurable: true,
+    })
+    document.dispatchEvent(new Event('pointerlockchange'))
+    expect(controls.shoot).toBe(false)
+  })
+
+  it('respects custom keymap — ArrowUp sets forward, KeyW does not', () => {
+    controls.destroy()
+    const customKeymap = { ...DEFAULT_KEYMAP, forward: 'ArrowUp' }
+    controls = new Controls(element, () => 'playing', customKeymap)
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }))
+    expect(controls.forward).toBe(false)
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowUp' }))
+    expect(controls.forward).toBe(true)
+  })
+})
+
+describe('Controls bot hotkeys', () => {
+  let element: HTMLElement
+  let controls: Controls
+
+  beforeEach(() => {
+    element = createMockElement()
+    controls = new Controls(element, () => 'playing')
+  })
+  afterEach(() => { controls.destroy(); vi.restoreAllMocks() })
+
+  it('adds a CT bot on BracketLeft and a T bot on BracketRight', () => {
+    const teams: string[] = []
+    controls.onAddBot = (t) => teams.push(t)
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'BracketLeft' }))
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'BracketRight' }))
+    expect(teams).toEqual(['ct', 't'])
+  })
+
+  it('removes a bot on Backslash', () => {
+    const remove = vi.fn()
+    controls.onRemoveBot = remove
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Backslash' }))
+    expect(remove).toHaveBeenCalledTimes(1)
+  })
+})
